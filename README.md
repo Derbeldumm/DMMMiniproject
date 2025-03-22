@@ -1,5 +1,6 @@
 # DMM MINIPROJECT
 ## About
+Disclaimer: Written with the help of GenAI. Everything work in progress.
 
 ## Project Structure
 Folders:
@@ -8,14 +9,7 @@ Folders:
  - The "analysis" folder contains capabilities to analyse a model
  - The "tests" folder contains capabilities to run unit tests for the entire project 
  - The "utils" folder contains utility capabilities 
-
-## ToDo
-- Agree on what we want to achieve (Write About section)
-- Agree on Project Name (Change Name)
-- Agree on Interfaces to implement (Write down and then invite the rest to the Repo)
-- Distribute the Workload for joined Blocks and agree on a collaboration format (e.g. hackathon style in a shared location)
-
-
+ - if you want to run stuff, create your own run_<name>.py file in the root folder and import the necessary capabilities from the other files
 
 ## Future
 Add: Getting started, Usage, Citation
