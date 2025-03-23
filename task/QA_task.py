@@ -72,6 +72,7 @@ names = [
 ]
 
 actor_types = {name: Ty(name) for name in names}
+actor_type = Ty("Actor")
 actor_types_pregroup = {name: TyPreGroup(name) for name in names}
 
 bool_type = Ty("bool")
@@ -129,7 +130,7 @@ class Story:
         self.actor_init = actors
         self.n_actors = len(actors)
         self.n_sentences = n_sentences
-        self.events = ["follows", "turns", "op_dir_of"]
+        self.events = ["follows", "turns"] # "op_dir_of"
         self.turn_direction_choices = {
             2: ["around"],
             4: ["left", "right", "around"],
@@ -150,7 +151,7 @@ class Story:
             self.actor_types[actor.name] = Ty(actor.name)
 
     def event(self, p_2qb):
-        ev = random.choices(self.events, weights=[p_2qb / 2, 1 - p_2qb, p_2qb / 2])[0]
+        ev = random.choices(self.events)[0] # , weights=[p_2qb / 2, 1 - p_2q, p_2qb / 2]
 
         if ev == "follows":
             act1, act2 = random.sample(self.active_actors, 2)
@@ -178,7 +179,7 @@ class Story:
         # Create the domain type - all actors
         dom = Ty()
         for actor in self.active_actors:
-            dom @= actor_types[actor.name]
+            dom @= actor_type #actor_types[actor.name]
         
         # Define boxes for different actions
         walks_box = lambda actor_name, direction: Box(f"walks_{direction}", actor_name.obj, actor_name.obj)
@@ -260,8 +261,8 @@ class Story:
         for act in self.actor_init:
             self.init_actor(act)
 
-        while len(self.story) < self.n_sentences:
-            self.event(p_2qb)
+        # while len(self.story) < self.n_sentences:
+        #     self.event(p_2qb)
         
         self.question = random.sample(self.active_actors, 2)
         self.answer = self.question[0].direction == self.question[1].direction
@@ -345,6 +346,6 @@ class QA_task(base_taskmodule):
         return ["follows", "turns", "opposite_direction", "forget", "question"]
 
     def get_type_strings(self):
-        return list(actor_types.keys()) + ["bool"]
+        return list(actor_types.keys()) + ["bool"] + ["Actor"]
         
 

@@ -3,13 +3,29 @@ import pickle
 from task.base_taskmodule import base_taskmodule
 from training.base_trainingmodule import base_trainingmodule
 from pytket.extensions.qiskit import AerBackend
-from lambeq import Sim4Ansatz, RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel
+from lambeq import RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel, CircuitAnsatz, Sim4Ansatz
 import lambeq.backend.converters.discopy
 from lambeq.backend.grammar import Ty
 from lambeq import Dataset
 import matplotlib.pyplot as plt
-# from discopy.tensor import Diagram as DisCopyDiagram
+from discopy.grammar.pregroup import Box as BoxPG, Ty as TyPG, Functor as FunctorPG, Spider as SpiderPG, Id as IdPG
+from discopy.rigid import Ob
+from lambeq.backend.quantum import (
+    Bra,
+    CRz,
+    Diagram as Circuit,
+    Discard,
+    H,
+    Id,
+    Ket,
+    quantum,
+    qubit,
+    Rotation,
+    Rx, Ry, Rz
+)
 import numpy as np
+from typing import Mapping
+
 class lambeq_trainer(base_trainingmodule):
     """A training module for training based on the lambeq library"""
 
@@ -18,8 +34,8 @@ class lambeq_trainer(base_trainingmodule):
 
     def learn_meanings(self, task_module: base_taskmodule) -> dict:
         print("Generating diagrams...")
-        #generate diagrams if not already generated and stored in pickle file
-        if not os.path.exists("datasets/diagrams.pkl"):
+        #generate diagrams if not already generated and stored in pickle file   
+        if True or os.path.exists("datasets/diagrams.pkl"):
             diagrams, labels = task_module.get_scenarios()
             with open("datasets/diagrams.pkl", "wb") as f:
                 pickle.dump((diagrams, labels), f)
@@ -27,14 +43,28 @@ class lambeq_trainer(base_trainingmodule):
             with open("datasets/diagrams.pkl", "rb") as f:
                 diagrams, labels = pickle.load(f)
         print("Diagrams generated")
-        
+
         train_diagrams = diagrams[:int(len(diagrams) * 0.8)]
         val_diagrams = diagrams[int(len(diagrams) * 0.8):]
-        train_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in train_diagrams]
-        val_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in val_diagrams]
 
         train_labels = labels[:int(len(labels) * 0.8)]
         val_labels = labels[int(len(labels) * 0.8):]
+
+
+        ob = lambda ty: ty
+        def ar(box):
+            if box.name == "follows" or box.name == "question":
+                return IdPG(box.dom) @ BoxPG("", TyPG(), TyPG("Ancilla")) >> BoxPG(box.name, box.dom @ TyPG("Ancilla"), box.cod @ TyPG("Ancilla")) >> IdPG(box.cod) @ BoxPG("", TyPG("Ancilla"), TyPG())
+            else:
+                return box
+
+        F = FunctorPG(ob, ar)
+
+        train_diagrams = [F(diagram) for diagram in train_diagrams]
+        val_diagrams = [F(diagram) for diagram in val_diagrams]
+
+        train_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in train_diagrams]
+        val_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in val_diagrams]
 
         train_diagrams = [
             diagram.normal_form()
@@ -51,16 +81,18 @@ class lambeq_trainer(base_trainingmodule):
         val_diagrams = [remove_cups(diagram) for diagram in val_diagrams]
         print("Cups removed")
 
-        train_diagrams[0].draw()    
 
-        ansatz = Sim4Ansatz({Ty(type_string): 1 for type_string in task_module.get_type_strings()},
-                   n_layers=1, n_single_qubit_params=3)
+        ansatz = Sim4Ansatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
+                   n_layers=3, n_single_qubit_params=3, discard=True)
         
         train_circuits = [ansatz(diagram) for diagram in train_diagrams]
         val_circuits =  [ansatz(diagram)  for diagram in val_diagrams]
-        train_circuits[0].draw(figsize=(9, 10))
 
         print("Diagrams converted to circuits") 
+
+        print(f"Label: {train_labels[0]}")
+        train_diagrams[0].draw(figsize=(9, 10))
+        train_circuits[0].draw(figsize=(9, 10))
 
         all_circuits = train_circuits + val_circuits
 
@@ -87,7 +119,7 @@ class lambeq_trainer(base_trainingmodule):
             loss_function=bce,
             epochs=EPOCHS,
             optimizer=SPSAOptimizer,
-            optim_hyperparams={'a': 0.01, 'c': 0.01, 'A':0.001*EPOCHS},
+            optim_hyperparams={'a': 0.03, 'c': 0.03, 'A':0.001*EPOCHS},
             evaluate_functions=eval_metrics,
             evaluate_on_train=True,
             verbose='text',
@@ -136,3 +168,67 @@ class lambeq_trainer(base_trainingmodule):
         model.load(trainer.log_dir + '/best_model.lt')
         val_acc = acc(model(val_circuits), val_labels)
         print('Validation accuracy:', val_acc.item())
+
+
+class CustomSim4Ansatz(CircuitAnsatz):
+    """Circuit 4 from Sim et al.
+
+    Ansatz with a layer of Rx and Rz gates, followed by a
+    ladder of CRxs.
+
+    Paper at: https://arxiv.org/abs/1905.10876
+
+    """
+
+    def __init__(self,
+                 ob_map: Mapping[Ty, int],
+                 n_layers: int,
+                 n_single_qubit_params: int = 3,
+                 discard: bool = False) -> None:
+        """Instantiate a Sim 4 ansatz.
+
+        Parameters
+        ----------
+        ob_map : dict
+            A mapping from :py:class:`lambeq.backend.grammar.Ty` to
+            the number of qubits it uses in a circuit.
+        n_layers : int
+            The number of layers used by the ansatz.
+        n_single_qubit_params : int, default: 3
+            The number of single qubit rotations used by the ansatz.
+            It only affects wires that `ob_map` maps to a single
+            qubit.
+        discard : bool, default: False
+            Discard open wires instead of post-selecting.
+
+        """
+        super().__init__(ob_map,
+                         n_layers,
+                         n_single_qubit_params,
+                         self.circuit,
+                         discard,
+                         [Rx, Rz])
+
+    def params_shape(self, n_qubits: int) -> tuple[int, ...]:
+        return (self.n_layers, 3 * n_qubits - 1)
+
+    def circuit(self, n_qubits: int, params: np.ndarray) -> Circuit:
+        if n_qubits == 1:
+            circuit = Rx(params[0]) >> Rz(params[1]) >> Rx(params[2])
+        else:
+            circuit = Id(n_qubits)
+
+            for thetas in params:
+                circuit >>= Id().tensor(*map(Rx, thetas[:n_qubits]))
+                circuit >>= Id().tensor(*map(Rz,
+                                             thetas[n_qubits:2 * n_qubits]))
+
+                crxs = Id(n_qubits)
+                for i in range(n_qubits - 1):
+                    crxs = crxs.CRx(thetas[2 * n_qubits + i], i, i + 1)
+
+                circuit >>= crxs
+
+            circuit >>= Id(n_qubits)
+
+        return circuit  # type: ignore[return-value]
