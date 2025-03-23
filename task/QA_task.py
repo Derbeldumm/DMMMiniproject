@@ -150,7 +150,7 @@ class Story:
             # Add actor to diagram types
             self.actor_types[actor.name] = Ty(actor.name)
 
-    def event(self, p_2qb):
+    def event(self):
         ev = random.choices(self.events)[0] # , weights=[p_2qb / 2, 1 - p_2q, p_2qb / 2]
 
         if ev == "follows":
@@ -158,7 +158,7 @@ class Story:
             if self.story[-1] != f"{act1.name} follows {act2.name}. ":
                 self.story.append((act1.follows(act2), ev, [self.active_actors.index(act1), self.active_actors.index(act2)]))
             else:
-                self.event(p_2qb)
+                self.event()
 
         elif ev == "turns":
             act = random.choice(self.active_actors)
@@ -173,7 +173,7 @@ class Story:
             ):  
                 self.story.append((act1.opposite_direction_of(act2), ev, [self.active_actors.index(act1), self.active_actors.index(act2)]))
             else:
-                self.event(p_2qb)
+                self.event()
     
     def build_diagram(self):
         # Create the domain type - all actors
@@ -257,20 +257,22 @@ class Story:
         # grammar_diagram.draw()
         return grammar_diagram
     
-    def generate(self, p_2qb=0.7):
+    def generate(self):
         for act in self.actor_init:
             self.init_actor(act)
 
-        # while len(self.story) < self.n_sentences:
-        #     self.event(p_2qb)
+        while len(self.story) < self.n_sentences:
+            self.event()
         
         self.question = random.sample(self.active_actors, 2)
         self.answer = self.question[0].direction == self.question[1].direction
 
+
         # Build the diagram representation of the story
         diagram = self.build_diagram()
 
-        return self.story, diagram, self.question, self.answer
+
+        return self.story, diagram, self.answer
 
 def gen_stories(
     min_actors, max_actors, min_sentences, max_sentences, n_samples,
@@ -292,22 +294,18 @@ def gen_stories(
             while (pos_count < n_samples or neg_count < n_samples):
                 actors = [Actor(name=name, n_directions=n_directions) for name in used_names]
                 story = Story(actors[:n_act], n_sents, n_directions=n_directions)
-                s, diagram, question, answer = story.generate()
+                s, diagram, answer = story.generate()
                 # print(s)
                 # diagram.draw()
-                act1, act2 = random.sample(story.active_actors, 2)
-                
-                # Check if actors are walking in the same direction
-                same_direction = act1.direction == act2.direction
                 
                 # Create label: [1,0] if same direction, [0,1] if different
-                label = [1, 0] if same_direction else [0, 1]
+                label = [1, 0] if answer else [0, 1]
                 
-                if same_direction and pos_count < n_samples:
+                if answer and pos_count < n_samples:
                     stories.append(diagram)
                     labels.append(label)
                     pos_count += 1
-                elif not same_direction and neg_count < n_samples:
+                elif not answer and neg_count < n_samples:
                     stories.append(diagram)
                     labels.append(label)
                     neg_count += 1
@@ -321,10 +319,10 @@ class QA_task(base_taskmodule):
         super().__init__()
 
         self.min_actors = 2
-        self.max_actors = 2 #10
+        self.max_actors = 5 #10
         self.min_sents = 5
-        self.max_sents = 5
-        self.n_samples = 100 #more samples for training necc
+        self.max_sents = 10
+        self.n_samples = 10 #more samples for training necc
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:

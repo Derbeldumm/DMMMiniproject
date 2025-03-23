@@ -3,7 +3,8 @@ import pickle
 from task.base_taskmodule import base_taskmodule
 from training.base_trainingmodule import base_trainingmodule
 from pytket.extensions.qiskit import AerBackend
-from lambeq import RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel, CircuitAnsatz, Sim4Ansatz
+from lambeq import RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel, CircuitAnsatz, Sim4Ansatz, IQPAnsatz
+from lambeq.training import PennyLaneModel
 import lambeq.backend.converters.discopy
 from lambeq.backend.grammar import Ty
 from lambeq import Dataset
@@ -25,7 +26,7 @@ from lambeq.backend.quantum import (
 )
 import numpy as np
 from typing import Mapping
-
+import torch
 class lambeq_trainer(base_trainingmodule):
     """A training module for training based on the lambeq library"""
 
@@ -66,6 +67,10 @@ class lambeq_trainer(base_trainingmodule):
         train_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in train_diagrams]
         val_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in val_diagrams]
 
+        # for i in range(len(train_diagrams)):
+        #     train_diagrams[i].draw()
+        #     print(train_labels[i])
+
         train_diagrams = [
             diagram.normal_form()
             for diagram in train_diagrams if diagram is not None
@@ -82,8 +87,8 @@ class lambeq_trainer(base_trainingmodule):
         print("Cups removed")
 
 
-        ansatz = Sim4Ansatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
-                   n_layers=3, n_single_qubit_params=3, discard=True)
+        ansatz = Sim9CzAnsatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
+                   n_layers=3, n_single_qubit_params=3, discard=False)
         
         train_circuits = [ansatz(diagram) for diagram in train_diagrams]
         val_circuits =  [ansatz(diagram)  for diagram in val_diagrams]
@@ -96,36 +101,23 @@ class lambeq_trainer(base_trainingmodule):
 
         all_circuits = train_circuits + val_circuits
 
-        backend = AerBackend()
-        backend_config = {
-            'backend': backend,
-            'compilation': backend.default_compilation_pass(2),
-            'shots': 8192
-        }
-
-        model = TketModel.from_diagrams(all_circuits, backend_config=backend_config)
-
-        # Using the builtin binary cross-entropy error from lambeq
-        bce = BinaryCrossEntropyLoss()
-
-        acc = lambda y_hat, y: np.sum(np.round(y_hat) == y) / len(y) / 2  # half due to double-counting
-        eval_metrics = {"acc": acc}
-
-        EPOCHS = 10
         BATCH_SIZE = 10
+        EPOCHS = 100
 
-        trainer = QuantumTrainer(
-            model,
-            loss_function=bce,
-            epochs=EPOCHS,
-            optimizer=SPSAOptimizer,
-            optim_hyperparams={'a': 0.03, 'c': 0.03, 'A':0.001*EPOCHS},
-            evaluate_functions=eval_metrics,
-            evaluate_on_train=True,
-            verbose='text',
-            log_dir='RelPron/logs',
-            seed=0
-        )
+
+        model = PennyLaneModel.from_diagrams(all_circuits)
+        model.initialise_weights()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+
+        best = {'acc': 0, 'epoch': 0}
+        
+
+
+        def accuracy(circuits, labels):
+            probs = model(circuits)
+            return (torch.argmax(probs, dim=1) ==
+                    torch.argmax(torch.tensor(labels), dim=1)).sum().item()/len(circuits)
+        
         train_dataset = Dataset(
                     train_circuits,
                     train_labels,
@@ -133,59 +125,49 @@ class lambeq_trainer(base_trainingmodule):
 
         val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
 
-        trainer.fit(train_dataset, val_dataset,
-            early_stopping_criterion='acc',
-            early_stopping_interval=5,
-            minimize_criterion=False)
-        
-        fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
-        ax_tl.set_title('Training set')
-        ax_tr.set_title('Development set')
-        ax_bl.set_xlabel('Epochs')
-        ax_br.set_xlabel('Epochs')
-        ax_bl.set_ylabel('Accuracy')
-        ax_tl.set_ylabel('Loss')
 
-        colours = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-        range_ = np.arange(1, len(trainer.train_epoch_costs)+1)
-        ax_tl.plot(range_, trainer.train_epoch_costs, color=next(colours))
-        ax_bl.plot(range_, trainer.train_eval_results['acc'], color=next(colours))
-        ax_tr.plot(range_, trainer.val_costs, color=next(colours))
-        ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
+        for i in range(EPOCHS):
+            epoch_loss = 0
+            for circuits, labels in train_dataset:
+                optimizer.zero_grad()
+                probs = model(circuits)
+                loss = torch.nn.functional.mse_loss(probs,
+                                                    torch.tensor(labels))
+                # print(probs)
+                # print(labels)
 
-        # mark best model as circle
-        best_epoch = np.argmax(trainer.val_eval_results['acc'])
-        ax_tl.plot(best_epoch + 1, trainer.train_epoch_costs[best_epoch], 'o', color='black', fillstyle='none')
-        ax_tr.plot(best_epoch + 1, trainer.val_costs[best_epoch], 'o', color='black', fillstyle='none')
-        ax_bl.plot(best_epoch + 1, trainer.train_eval_results['acc'][best_epoch], 'o', color='black', fillstyle='none')
-        ax_br.plot(best_epoch + 1, trainer.val_eval_results['acc'][best_epoch], 'o', color='black', fillstyle='none')
+                epoch_loss += loss.item()
+                loss.backward()
+                optimizer.step()
 
-        ax_br.text(best_epoch + 1.4, trainer.val_eval_results['acc'][best_epoch], 'early stopping', va='center')
+            if i % 5 == 0:
+                dev_acc = accuracy(val_circuits, val_labels)
 
-        plt.show()
+                print('Epoch: {}'.format(i))
+                print('Train loss: {}'.format(epoch_loss))
+                print('Train acc: {}'.format(accuracy(train_circuits, train_labels)))
+                print('Dev acc: {}'.format(dev_acc))
 
-        # print test accuracy
-        model.load(trainer.log_dir + '/best_model.lt')
-        val_acc = acc(model(val_circuits), val_labels)
-        print('Validation accuracy:', val_acc.item())
+                if dev_acc > best['acc']:
+                    best['acc'] = dev_acc
+                    best['epoch'] = i
+                    model.save('model.lt')
+                elif i - best['epoch'] >= 100:
+                    print('Early stopping')
+                    break
 
+        if best['acc'] > accuracy(val_circuits, val_labels):
+            model.load('model.lt')
 
-class CustomSim4Ansatz(CircuitAnsatz):
-    """Circuit 4 from Sim et al.
+        print('Final test accuracy: {}'.format(accuracy(val_circuits, val_labels)))
 
-    Ansatz with a layer of Rx and Rz gates, followed by a
-    ladder of CRxs.
-
-    Paper at: https://arxiv.org/abs/1905.10876
-
-    """
-
+class Sim9CzAnsatz(CircuitAnsatz):
     def __init__(self,
                  ob_map: Mapping[Ty, int],
                  n_layers: int,
                  n_single_qubit_params: int = 3,
                  discard: bool = False) -> None:
-        """Instantiate a Sim 4 ansatz.
+        """Instantiate a Sim 9Cz ansatz.
 
         Parameters
         ----------
@@ -209,26 +191,31 @@ class CustomSim4Ansatz(CircuitAnsatz):
                          discard,
                          [Rx, Rz])
 
+
+
+
+
     def params_shape(self, n_qubits: int) -> tuple[int, ...]:
-        return (self.n_layers, 3 * n_qubits - 1)
+        return (self.n_layers, n_qubits)
+
+
+
+
+
 
     def circuit(self, n_qubits: int, params: np.ndarray) -> Circuit:
         if n_qubits == 1:
             circuit = Rx(params[0]) >> Rz(params[1]) >> Rx(params[2])
+        
         else:
             circuit = Id(n_qubits)
 
             for thetas in params:
-                circuit >>= Id().tensor(*map(Rx, thetas[:n_qubits]))
-                circuit >>= Id().tensor(*map(Rz,
-                                             thetas[n_qubits:2 * n_qubits]))
+                for q in range(n_qubits):
+                    circuit = circuit.H(q)
+                for q in range(n_qubits - 1):
+                    circuit = circuit.CZ(q, q + 1)
 
-                crxs = Id(n_qubits)
-                for i in range(n_qubits - 1):
-                    crxs = crxs.CRx(thetas[2 * n_qubits + i], i, i + 1)
-
-                circuit >>= crxs
-
-            circuit >>= Id(n_qubits)
+                circuit >>= Id().tensor(*map(Rx, thetas))
 
         return circuit  # type: ignore[return-value]
