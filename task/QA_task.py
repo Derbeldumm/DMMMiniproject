@@ -262,8 +262,8 @@ class Story:
         for act in self.actor_init:
             self.init_actor(act)
 
-        while len(self.story) < self.n_sentences:
-            self.event()
+        # while len(self.story) < self.n_sentences:
+        #     self.event()
         
         self.question = random.sample(self.active_actors, 2)
         self.answer = self.question[0].direction == self.question[1].direction
@@ -322,8 +322,8 @@ class QA_task(base_taskmodule):
         self.min_actors = 3
         self.max_actors = 3 #10
         self.min_sents = 5
-        self.max_sents = 10
-        self.n_samples = 20 #more samples for training necc
+        self.max_sents = 5
+        self.n_samples = 50 #more samples for training necc
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:
@@ -339,7 +339,87 @@ class QA_task(base_taskmodule):
         return diagrams, labels
 
     def get_hints(self):
-        pass
+        # Define boxes for different actions
+        walks_box = lambda actor_name, direction: Box(f"walks_{direction}", actor_name.obj, actor_name.obj)
+
+        turns_box = lambda actor_name, turn_type: Box(f"turn_{turn_type}", actor_name.obj, actor_name.obj)
+        
+        follows_box = lambda follower, followed: Box("follows", 
+                      follower.obj @ followed.obj, 
+                      follower.obj @ followed.obj)
+        
+        opposite_box = lambda actor1, actor2: Box("opposite_direction", 
+                      actor1.obj @ actor2.obj, 
+                      actor1.obj @ actor2.obj)
+        
+        forget_box = lambda actor_name: Box("forget", actor_name.obj, Ty())
+
+        question_box = lambda actor1, actor2: Box("question", 
+                      actor1.obj @ actor2.obj, 
+                      Ty("bool"))
+        diagrams = []
+        labels = []
+
+        for dir1 in ["north", "south"]:
+            for dir2 in ["north", "south"]:
+                for turn_bool_val in [True, False]:
+                    for turn_bool_val2 in [True, False]:
+                        for follower_bool_val in [True, False]:
+                            @Diagram.from_callable(Ty(), bool_type)
+                            def diagram(*args):
+                                actors = [Spider(0,1,actor_type)(), Spider(0,1,actor_type)()]
+                                actors[0] = walks_box(actors[0], dir1)(actors[0])
+                                actors[1] = walks_box(actors[1], dir2)(actors[1])
+                                if turn_bool_val:
+                                    actors[0] = turns_box(actors[0], "around")(actors[0])
+                                if turn_bool_val2:
+                                    actors[1] = turns_box(actors[1], "around")(actors[1])
+                                if follower_bool_val:
+                                    actors[0], actors[1] = follows_box(actors[0], actors[1])(actors[0], actors[1])
+                                result = question_box(actors[1], actors[0])(actors[1], actors[0])
+                                return result
+                        
+                            diagrams.append(diagram)
+                            labels.append([1, 0] if ((dir1 == dir2) ^ (turn_bool_val ^ turn_bool_val2)) or follower_bool_val else [0, 1])
+        
+        # Define proper conversion functions
+        def ob(ty):
+            """Convert Frobenius Ty to Pregroup Ty"""
+            if isinstance(ty, Ty):
+                # Convert a compound type
+                result = TyPreGroup()
+                for t in ty:
+                    # Convert each atomic type
+                    if str(t) in actor_types_pregroup:
+                        result @= actor_types_pregroup[str(t)]
+                    elif str(t) == "bool":
+                        result @= TyPreGroup("bool")
+                    else:
+                        result @= TyPreGroup(str(t))
+                return result
+            else:
+                # Convert a single type
+                return TyPreGroup(str(ty))
+        
+        def ar(box):
+            """Convert Frobenius Box to Pregroup Box"""
+            # Convert domain and codomain types
+            dom = ob(box.dom)
+            cod = ob(box.cod)
+            # Create a new box with the same name but pregroup types
+            return BoxPreGroup(box.name, dom, cod)
+        
+        # Create the functor
+        F = Functor(ob, ar)
+        
+        grammar_diagrams = []
+        # Apply the functor to convert the diagram
+        for diagram in diagrams:
+            grammar_diagram = F(diagram)
+            grammar_diagrams.append(grammar_diagram)
+        grammar_diagrams[1].draw()
+
+        return grammar_diagrams, labels
 
     def get_dictionary(self):
         return ["follows", "turns", "question"]

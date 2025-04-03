@@ -47,6 +47,8 @@ class lambeq_trainer(base_trainingmodule):
                 diagrams, labels = pickle.load(f)
         print("Diagrams generated")
 
+        hint_diagrams, hint_labels = task_module.get_hints()
+
         train_diagrams = diagrams[:int(len(diagrams) * 0.8)]
         val_diagrams = diagrams[int(len(diagrams) * 0.8):]
 
@@ -56,7 +58,7 @@ class lambeq_trainer(base_trainingmodule):
 
         ob = lambda ty: ty
         def ar(box):
-            if box.name == "follows" or box.name == "question":
+            if box.name == "follows":
                 return IdPG(box.dom) @ BoxPG("", TyPG(), TyPG("Ancilla")) >> BoxPG(box.name, box.dom @ TyPG("Ancilla"), box.cod @ TyPG("Ancilla")) >> IdPG(box.cod) @ BoxPG("", TyPG("Ancilla"), TyPG())
             else:
                 return box
@@ -65,9 +67,11 @@ class lambeq_trainer(base_trainingmodule):
 
         train_diagrams = [F(diagram) for diagram in train_diagrams]
         val_diagrams = [F(diagram) for diagram in val_diagrams]
+        hint_diagrams = [F(diagram) for diagram in hint_diagrams]
 
         train_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in train_diagrams]
         val_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in val_diagrams]
+        hint_diagrams = [lambeq.backend.converters.discopy.from_discopy(diagram) for diagram in hint_diagrams]
 
         # for i in range(len(train_diagrams)):
         #     train_diagrams[i].draw()
@@ -81,38 +85,57 @@ class lambeq_trainer(base_trainingmodule):
             diagram.normal_form()
             for diagram in val_diagrams if diagram is not None
         ]
+        hint_diagrams = [
+            diagram.normal_form()
+            for diagram in hint_diagrams if diagram is not None
+        ]
         print("Diagrams normalised")
         
         remove_cups = RemoveCupsRewriter()
         train_diagrams = [remove_cups(diagram) for diagram in train_diagrams]
         val_diagrams = [remove_cups(diagram) for diagram in val_diagrams]
+        hint_diagrams = [remove_cups(diagram) for diagram in hint_diagrams]
         print("Cups removed")
 
 
-        ansatz = Sim4Ansatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
+        ansatz = IQPAnsatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
                    n_layers=3, n_single_qubit_params=3, discard=False)
         
         train_circuits = [ansatz(diagram) for diagram in train_diagrams]
         val_circuits =  [ansatz(diagram)  for diagram in val_diagrams]
-
+        hint_circuits = [ansatz(diagram) for diagram in hint_diagrams]
         print("Diagrams converted to circuits") 
 
         print(f"Label: {train_labels[0]}")
         train_diagrams[0].draw(figsize=(9, 10))
         train_circuits[0].draw(figsize=(9, 10))
+        
 
-        all_circuits = train_circuits + val_circuits
+        all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 10
-        EPOCHS = 500
+        EPOCHS = 100
 
 
-        # Create a model with post-processing
-        model = NumpyModel.from_diagrams(all_circuits, use_jit=True)
+        # # Create a model with post-processing
+        # model = NumpyModel.from_diagrams(all_circuits, use_jit=True)
+        # model.initialise_weights()
+
+        # # Define accuracy function
+        # acc = lambda y_hat, y: np.sum(np.round(y_hat) == y) / len(y) / 2
+
+        backend_config = {'backend': 'default.qubit'}  # this is the default PennyLane simulator
+        model = PennyLaneModel.from_diagrams(all_circuits,
+                                            probabilities=True,
+                                            normalize=True,
+                                            backend_config=backend_config)
         model.initialise_weights()
+        def acc(y_hat, y):
+            return (torch.argmax(y_hat, dim=1) ==
+                    torch.argmax(y, dim=1)).sum().item()/len(y)
 
-        # Define accuracy function
-        acc = lambda y_hat, y: np.sum(np.round(y_hat) == y) / len(y) / 2
+        def loss(y_hat, y):
+            return torch.nn.functional.mse_loss(y_hat, y)
 
         # Create datasets
         train_dataset = Dataset(
@@ -121,33 +144,37 @@ class lambeq_trainer(base_trainingmodule):
             batch_size=BATCH_SIZE)
 
         val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
+        hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
 
         # Create a trainer using lambeq's QuantumTrainer
-        trainer = QuantumTrainer(
-            model,
-            loss_function=BinaryCrossEntropyLoss(use_jax=True),
-            epochs=EPOCHS,
-            optimizer=NelderMeadOptimizer,
-            optim_hyperparams={'a': 0.01, 'c': 0.01, 'A':0.001*EPOCHS},
-            evaluate_functions={'acc': acc},
-            evaluate_on_train=True,
-            verbose='text',
-            seed=0
-        )
-        # trainer = PytorchTrainer(
-        #     model=model,
+        # trainer = QuantumTrainer(
+        #     model,
         #     loss_function=BinaryCrossEntropyLoss(use_jax=True),
-        #     optimizer=torch.optim.Adam,
-        #     learning_rate=0.001,
         #     epochs=EPOCHS,
+        #     optimizer=SPSAOptimizer,
+        #     optim_hyperparams={'a': 0.03, 'c': 0.00001, 'A':0.00*EPOCHS},
         #     evaluate_functions={'acc': acc},
         #     evaluate_on_train=True,
-        #     use_tensorboard=False,
         #     verbose='text',
-        #     seed=0)
+        #     seed=0
+        # )
+        trainer = PytorchTrainer(
+            model=model,
+            loss_function=loss,
+            optimizer=torch.optim.Adam,
+            learning_rate=0.01,
+            epochs=EPOCHS,
+            evaluate_functions={'acc': acc},
+            evaluate_on_train=True,
+            use_tensorboard=False,
+            verbose='text',
+            seed=0)
 
-        # Train the model
-        trainer.fit(train_dataset, val_dataset)
+        # Hint the model
+        hint_circuits[0].draw(figsize=(9, 10))
+        trainer.fit(hint_dataset)
+
+        #trainer.fit(train_dataset, val_dataset)
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
         ax_tl.set_title('Training set')
