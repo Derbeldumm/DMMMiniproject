@@ -3,8 +3,8 @@ import pickle
 from task.base_taskmodule import base_taskmodule
 from training.base_trainingmodule import base_trainingmodule
 from pytket.extensions.qiskit import AerBackend
-from lambeq import RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel, CircuitAnsatz, Sim4Ansatz, IQPAnsatz
-from lambeq.training import PennyLaneModel
+from lambeq import RemoveCupsRewriter, BinaryCrossEntropyLoss, QuantumTrainer, SPSAOptimizer, TketModel, CircuitAnsatz, Sim4Ansatz, IQPAnsatz, PytorchTrainer, IQPAnsatz, Sim4Ansatz, NelderMeadOptimizer
+from lambeq.training import PennyLaneModel, NumpyModel, PytorchModel
 import lambeq.backend.converters.discopy
 from lambeq.backend.grammar import Ty
 from lambeq import Dataset
@@ -27,6 +27,8 @@ from lambeq.backend.quantum import (
 import numpy as np
 from typing import Mapping
 import torch
+from jax import jit, grad
+
 class lambeq_trainer(base_trainingmodule):
     """A training module for training based on the lambeq library"""
 
@@ -87,7 +89,7 @@ class lambeq_trainer(base_trainingmodule):
         print("Cups removed")
 
 
-        ansatz = Sim9CzAnsatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
+        ansatz = Sim4Ansatz({Ty(type_string): 1 for type_string in task_module.get_type_strings() + ["Ancilla"]},
                    n_layers=3, n_single_qubit_params=3, discard=False)
         
         train_circuits = [ansatz(diagram) for diagram in train_diagrams]
@@ -100,66 +102,68 @@ class lambeq_trainer(base_trainingmodule):
         train_circuits[0].draw(figsize=(9, 10))
 
         all_circuits = train_circuits + val_circuits
-
+        
         BATCH_SIZE = 10
-        EPOCHS = 100
+        EPOCHS = 500
 
 
-        model = PennyLaneModel.from_diagrams(all_circuits)
+        # Create a model with post-processing
+        model = NumpyModel.from_diagrams(all_circuits, use_jit=True)
         model.initialise_weights()
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 
-        best = {'acc': 0, 'epoch': 0}
-        
+        # Define accuracy function
+        acc = lambda y_hat, y: np.sum(np.round(y_hat) == y) / len(y) / 2
 
-
-        def accuracy(circuits, labels):
-            probs = model(circuits)
-            return (torch.argmax(probs, dim=1) ==
-                    torch.argmax(torch.tensor(labels), dim=1)).sum().item()/len(circuits)
-        
+        # Create datasets
         train_dataset = Dataset(
-                    train_circuits,
-                    train_labels,
-                    batch_size=BATCH_SIZE)
+            train_circuits,
+            train_labels,
+            batch_size=BATCH_SIZE)
 
         val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
 
+        # Create a trainer using lambeq's QuantumTrainer
+        trainer = QuantumTrainer(
+            model,
+            loss_function=BinaryCrossEntropyLoss(use_jax=True),
+            epochs=EPOCHS,
+            optimizer=NelderMeadOptimizer,
+            optim_hyperparams={'a': 0.01, 'c': 0.01, 'A':0.001*EPOCHS},
+            evaluate_functions={'acc': acc},
+            evaluate_on_train=True,
+            verbose='text',
+            seed=0
+        )
+        # trainer = PytorchTrainer(
+        #     model=model,
+        #     loss_function=BinaryCrossEntropyLoss(use_jax=True),
+        #     optimizer=torch.optim.Adam,
+        #     learning_rate=0.001,
+        #     epochs=EPOCHS,
+        #     evaluate_functions={'acc': acc},
+        #     evaluate_on_train=True,
+        #     use_tensorboard=False,
+        #     verbose='text',
+        #     seed=0)
 
-        for i in range(EPOCHS):
-            epoch_loss = 0
-            for circuits, labels in train_dataset:
-                optimizer.zero_grad()
-                probs = model(circuits)
-                loss = torch.nn.functional.mse_loss(probs,
-                                                    torch.tensor(labels))
-                # print(probs)
-                # print(labels)
+        # Train the model
+        trainer.fit(train_dataset, val_dataset)
 
-                epoch_loss += loss.item()
-                loss.backward()
-                optimizer.step()
+        fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
+        ax_tl.set_title('Training set')
+        ax_tr.set_title('Development set')
+        ax_bl.set_xlabel('Iterations')
+        ax_br.set_xlabel('Iterations')
+        ax_bl.set_ylabel('Accuracy')
+        ax_tl.set_ylabel('Loss')
 
-            if i % 5 == 0:
-                dev_acc = accuracy(val_circuits, val_labels)
-
-                print('Epoch: {}'.format(i))
-                print('Train loss: {}'.format(epoch_loss))
-                print('Train acc: {}'.format(accuracy(train_circuits, train_labels)))
-                print('Dev acc: {}'.format(dev_acc))
-
-                if dev_acc > best['acc']:
-                    best['acc'] = dev_acc
-                    best['epoch'] = i
-                    model.save('model.lt')
-                elif i - best['epoch'] >= 100:
-                    print('Early stopping')
-                    break
-
-        if best['acc'] > accuracy(val_circuits, val_labels):
-            model.load('model.lt')
-
-        print('Final test accuracy: {}'.format(accuracy(val_circuits, val_labels)))
+        colours = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+        range_ = np.arange(1, trainer.epochs + 1)
+        ax_tl.plot(range_, trainer.train_epoch_costs, color=next(colours))
+        ax_bl.plot(range_, trainer.train_eval_results['acc'], color=next(colours))
+        ax_tr.plot(range_, trainer.val_costs, color=next(colours))
+        ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
+ 
 
 class Sim9CzAnsatz(CircuitAnsatz):
     def __init__(self,

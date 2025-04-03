@@ -1,2 +1,4 @@
 /_build
 /shell.nix
+*/*.pyc
+*.lt

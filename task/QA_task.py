@@ -2,7 +2,7 @@ import random
 from task.base_taskmodule import base_taskmodule
 from tqdm import tqdm
 # from discopy.symmetric import Ty, Box
-from discopy.frobenius import Diagram, Ty, Box, Id
+from discopy.frobenius import Diagram, Ty, Box, Id, Spider
 from discopy.grammar.pregroup import Diagram as PreGroupDiagram, Ty as TyPreGroup, Box as BoxPreGroup, Functor 
 # from discopy.grammar.pregroup import Diagram, Ty, Box, Id
 
@@ -200,9 +200,9 @@ class Story:
                       actor1.obj @ actor2.obj, 
                       Ty("bool"))
         
-        @Diagram.from_callable(dom, bool_type)
+        @Diagram.from_callable(Ty(), bool_type)
         def diagram(*args):
-            actors = list(args)
+            actors = [Spider(0,1,actor_type)() for actor in self.active_actors]
             # actors[0] = walks_box(actors[0], self.active_actors[0].start_direction)(actors[0])
 
             for i in range(len(actors)):
@@ -255,6 +255,7 @@ class Story:
         
         # Draw and return the converted diagram
         # grammar_diagram.draw()
+        # grammar_diagram = BoxPreGroup("question", TyPreGroup("bool"), TyPreGroup("bool"))
         return grammar_diagram
     
     def generate(self):
@@ -318,11 +319,11 @@ class QA_task(base_taskmodule):
     def __init__(self):
         super().__init__()
 
-        self.min_actors = 2
-        self.max_actors = 5 #10
+        self.min_actors = 3
+        self.max_actors = 3 #10
         self.min_sents = 5
         self.max_sents = 10
-        self.n_samples = 10 #more samples for training necc
+        self.n_samples = 20 #more samples for training necc
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:
@@ -341,9 +342,9 @@ class QA_task(base_taskmodule):
         pass
 
     def get_dictionary(self):
-        return ["follows", "turns", "opposite_direction", "forget", "question"]
+        return ["follows", "turns", "question"]
 
     def get_type_strings(self):
-        return list(actor_types.keys()) + ["bool"] + ["Actor"]
+        return ["bool"] + ["Actor"]
         
 
