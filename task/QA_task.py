@@ -422,7 +422,8 @@ class QA_task(base_taskmodule):
         return grammar_diagrams, labels
 
     def get_dictionary(self):
-        return ["follows", "turns", "question"]
+        return [("follows", 2), ("turn_around", 1), ("question", 2), ("walks_north", 1), ("walks_south", 1)]
+    
 
     def get_type_strings(self):
         return ["bool"] + ["Actor"]

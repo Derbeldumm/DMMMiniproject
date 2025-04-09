@@ -38,7 +38,7 @@ class lambeq_trainer(base_trainingmodule):
     def learn_meanings(self, task_module: base_taskmodule) -> dict:
         print("Generating diagrams...")
         #generate diagrams if not already generated and stored in pickle file   
-        if True or os.path.exists("datasets/diagrams.pkl"):
+        if not os.path.exists("datasets/diagrams.pkl"):
             diagrams, labels = task_module.get_scenarios()
             with open("datasets/diagrams.pkl", "wb") as f:
                 pickle.dump((diagrams, labels), f)
@@ -114,7 +114,7 @@ class lambeq_trainer(base_trainingmodule):
         all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 10
-        EPOCHS = 100
+        EPOCHS = 25
 
 
         # # Create a model with post-processing
@@ -130,6 +130,8 @@ class lambeq_trainer(base_trainingmodule):
                                             normalize=True,
                                             backend_config=backend_config)
         model.initialise_weights()
+        model.cuda()
+
         def acc(y_hat, y):
             return (torch.argmax(y_hat, dim=1) ==
                     torch.argmax(y, dim=1)).sum().item()/len(y)
@@ -174,7 +176,11 @@ class lambeq_trainer(base_trainingmodule):
         hint_circuits[0].draw(figsize=(9, 10))
         trainer.fit(hint_dataset)
 
-        #trainer.fit(train_dataset, val_dataset)
+        #train on the actual task
+
+        trainer.epochs = 50
+        trainer.log_dir = "models/oldtask"
+        trainer.fit(train_dataset, val_dataset)
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
         ax_tl.set_title('Training set')
@@ -190,7 +196,10 @@ class lambeq_trainer(base_trainingmodule):
         ax_bl.plot(range_, trainer.train_eval_results['acc'], color=next(colours))
         ax_tr.plot(range_, trainer.val_costs, color=next(colours))
         ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
- 
+
+        plt.show()
+
+        model.save()
 
 class Sim9CzAnsatz(CircuitAnsatz):
     def __init__(self,
