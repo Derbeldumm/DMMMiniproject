@@ -9,13 +9,10 @@ class base_taskmodule(ABC):
         pass
 
     @abstractmethod
-    def get_hints(self) -> list[Diagram]:
+    def get_hints(self) -> tuple[list[Diagram], list[bool]]:
         pass
 
     @abstractmethod
-    def get_dictionary(self) -> dict[str, Diagram]:
+    def get_gates_to_analyse(self) -> list[Diagram]:
         pass
-
-    @abstractmethod
-    def get_type_strings(self) -> list[str]:
-        pass
+    

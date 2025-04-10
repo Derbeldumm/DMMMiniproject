@@ -1,9 +1,8 @@
-from task.base_taskmodule import base_taskmodule
-from lambeq.training import PennyLaneModel
-from lambeq.backend.grammar import Diagram, Ty, Box, Id
-from lambeq.backend.quantum import Ket
-from training.lambeq_training import Sim9CzAnsatz
 from task.QA_task import QA_task
+from training.lambeq_training import GrammarDiagramToCircuit
+from lambeq import PennyLaneModel, IQPAnsatz, backend, RemoveCupsRewriter
+from lambeq.backend.quantum import Ket
+from sympy import Symbol
 
 class entropy_analyser:
     """An analyser for the entropy of two-input two-output meanings"""
@@ -12,18 +11,19 @@ class entropy_analyser:
         self.task_module = QA_task()
 
     def analyse(self):
-        model = PennyLaneModel.from_checkpoint("./model.lt")
-        diagram = Id(Ty("Actor") @ Ty("Actor")) @ Box("", Ty(), Ty("Ancilla")) >> Box("follows", Ty("Actor") @ Ty("Actor") @ Ty("Ancilla"), Ty("Actor") @ Ty("Actor") @ Ty("Ancilla")) >> Id(Ty("Actor") @ Ty("Actor")) @ Box("", Ty("Ancilla"), Ty())
-
-        # diagram.draw()
-
-        ansatz = Sim9CzAnsatz({Ty(type_string): 1 for type_string in self.task_module.get_type_strings() + ["Ancilla"]},
-                   n_layers=3, n_single_qubit_params=3, discard=False)
-        circuit = ansatz(diagram)
+        model = PennyLaneModel.from_checkpoint("models/oldtask/best_model.lt")
+        gates_diagram = self.task_module.get_gates_to_analyse()[0]
+        circuit = GrammarDiagramToCircuit(gates_diagram)
+        circuit = Ket(1) @ Ket(0) >> circuit
+        circuit.draw()
 
         circuit = circuit.to_pennylane()
         
-        circuit.initialise_concrete_params(model.symbol_weight_map)
+        weightmap = {Symbol(f"follows___{i}"): model.symbol_weight_map[Symbol(f"follows_Actor@Actor@Ancilla_Actor@Actor@Ancilla_{i}")] for i in range(6)}
+        weightmap.update({k:v for k,v in model.symbol_weight_map.items()})
+
+
+        circuit.initialise_concrete_params(weightmap)
 
         circuit.draw()
 
