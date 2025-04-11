@@ -78,6 +78,11 @@ turns_to_box = lambda follower, followed: FrobeniusBox("turns_to",
                 follower.obj @ followed.obj, 
                 follower.obj @ followed.obj)(follower, followed)
 
+
+waves_box = lambda wave1, wave2: FrobeniusBox("waves", 
+                wave1.obj @ wave2.obj, 
+                wave1.obj @ wave2.obj)(wave1, wave2)
+
 question_box = lambda actor1, actor2: FrobeniusBox("question", 
                 actor1.obj @ actor2.obj, 
                 answer_type)(actor1, actor2)
@@ -197,6 +202,8 @@ class Story:
             for event in self.story:
                 if event[0] == "turns_to":
                     actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = turns_to_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
+                elif event[0] == "waves":
+                    actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = waves_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
                 elif event[0] == "turns":
                     actors[str_to_idx[event[1]]] = turns_box(actors[str_to_idx[event[1]]], event[2])
                 elif event[0] == "walks":
@@ -295,19 +302,24 @@ class QA_task(base_taskmodule):
                 for turn_bool_1 in [True, False]:
                     for turn_bool_2 in [True, False]:
                         for turns_to_bool in [True, False]:
-                            story = Story([Actor("Alice"), Actor("Bob")], 0, 2)
-                            story.active_actors[0].start_direction = dir1
-                            story.active_actors[1].start_direction = dir2
-                            story.question = [story.active_actors[0], story.active_actors[1]]
-                            if turn_bool_1:
-                                story.story.append(("turns", "Alice", "around"))
-                            if turn_bool_2:
-                                story.story.append(("turns", "Bob", "around"))
-                            if turns_to_bool:
-                                story.story.append(("turns_to", "Alice", "Bob"))
-                        
-                            diagrams.append(story.build_diagram())
-                            labels.append([1, 0] if ((dir1 == dir2) ^ (turn_bool_1 ^ turn_bool_2)) or turns_to_bool else [0, 1])
+                            for wave_bool in [True, False]:
+                                story = Story([Actor("Alice"), Actor("Bob")], 0, 2)
+                                story.active_actors[0].start_direction = dir1
+                                story.active_actors[1].start_direction = dir2
+                                story.question = [story.active_actors[0], story.active_actors[1]]
+                                if wave_bool:
+                                        story.story.append(("waves", "Alice", "Bob"))
+                                if turn_bool_1:
+                                    story.story.append(("turns", "Alice", "around"))
+                                if turn_bool_2:
+                                    story.story.append(("turns", "Bob", "around"))
+                                if turns_to_bool:
+                                    story.story.append(("turns_to", "Alice", "Bob"))
+                                if wave_bool:
+                                        story.story.append(("waves", "Alice", "Bob"))
+                            
+                                diagrams.append(story.build_diagram())
+                                labels.append([1, 0] if ((dir1 == dir2) ^ (turn_bool_1 ^ turn_bool_2)) or turns_to_bool else [0, 1])
         
         
         diagrams[0].draw()
@@ -315,8 +327,8 @@ class QA_task(base_taskmodule):
         return diagrams, labels
 
     def get_gates_to_analyse(self):
-        gates = ["turns_to"]
-        gates_diagrams = []
+        gates = ["turns_to", "waves"]
+        res = []
         for gate in gates:
             dom = FrobeniusTy("Alice") @ FrobeniusTy("Bob")
             codom = dom
@@ -324,11 +336,14 @@ class QA_task(base_taskmodule):
             #Generate Frobenius Diagram for the gate
             @FrobeniusDiagram.from_callable(dom, codom)
             def diagram(alice, bob):
-                alice, bob = turns_to_box(alice, bob)
+                if gate == "turns_to":
+                  alice, bob = turns_to_box(alice, bob)
+                elif gate == "waves":
+                  alice, bob = waves_box(alice, bob)
                 return alice, bob
             
             # Apply the functor to convert the diagram to a proper grammar diagram
             grammar_diagram = FrobeniusToGrammarFunctor(diagram)
-            gates_diagrams.append(grammar_diagram)
+            res.append((grammar_diagram, gate))
 
-        return gates_diagrams
+        return res

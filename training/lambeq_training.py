@@ -47,7 +47,7 @@ class lambeq_trainer(base_trainingmodule):
         all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 10
-        EPOCHS = 25
+        EPOCHS = 100
 
         backend_config = {'backend': 'default.qubit'}  # this is the default PennyLane simulator
         model = PennyLaneModel.from_diagrams(all_circuits,
@@ -82,10 +82,13 @@ class lambeq_trainer(base_trainingmodule):
             evaluate_on_train=True,
             use_tensorboard=False,
             verbose='text',
+            log_dir='models/hints',
             seed=0)
 
         # Hint the model
         trainer.fit(hint_dataset)
+        model.save("models/hints/final_model")
+
 
         #train on the actual task
         trainer.epochs = 50
