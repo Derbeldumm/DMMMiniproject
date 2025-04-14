@@ -1,7 +1,7 @@
 from task.QA_task import QA_task
 from training.lambeq_training import GrammarDiagramToCircuit
 from lambeq import PennyLaneModel, IQPAnsatz, backend, RemoveCupsRewriter
-from lambeq.backend.quantum import Ty, Ket, Rx, Rz
+from lambeq.backend.quantum import Ty, Ket, Rx, Rz, Ry
 
 class entropy_analyser:
     """An analyser for the entropy of two-input two-output meanings"""
@@ -10,7 +10,7 @@ class entropy_analyser:
         self.task_module = QA_task()
 
     def analyse(self):
-        model = PennyLaneModel.from_checkpoint("models/hints/final_model")
+        model = PennyLaneModel.from_checkpoint("models/hints/model.lt")
         gates = self.task_module.get_gates_to_analyse()
         for diagram, name in gates:
           circuit = GrammarDiagramToCircuit(diagram)
@@ -21,12 +21,14 @@ import numpy as np
 from scipy.linalg import sqrtm
 
 def calculate_entangling_power(circuit, model):
-  n_theta = 4  # Number of points along theta (polar angle)
-  n_phi = 4    # Number of points along phi (azimuthal angle)
+  entropy = 0
+  
+  n_theta = 6  # Number of points along theta (polar angle)
+  n_phi = 6    # Number of points along phi (azimuthal angle)
   
   # Create grid of points on the Bloch sphere
-  theta_values = np.linspace(0, np.pi, n_theta)
-  phi_values = np.linspace(0, 2*np.pi, n_phi, endpoint=False)
+  theta_values = np.linspace(0, .5, n_theta)
+  phi_values = np.linspace(0, 1, n_phi, endpoint=False)
   total_states = n_theta * n_phi * n_theta * n_phi
   
   print(f"Analyzing {total_states} grid points...")
@@ -36,8 +38,7 @@ def calculate_entangling_power(circuit, model):
             for theta2 in theta_values:
                 for phi2 in phi_values:
                     # Create the separable state
-                    input_state = Ket(0) @ Ket(0) >> Rx(theta1) @ Rx(theta2) >> Rz(phi1) @ Rz(phi2)
-
+                    input_state = Ket(0) @ Ket(0) >> Rz(phi1) @ Rz(phi2) >> Rx(theta1) @ Rx(theta2)
                     circuit_withInput = input_state >> circuit
                     circuit_withInput = circuit_withInput.to_pennylane()
                     circuit_withInput.initialise_concrete_params(model.symbol_weight_map)

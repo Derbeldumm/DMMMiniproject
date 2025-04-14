@@ -76,7 +76,7 @@ class lambeq_trainer(base_trainingmodule):
             model=model,
             loss_function=loss,
             optimizer=torch.optim.Adam,
-            learning_rate=0.01,
+            learning_rate=0.03,
             epochs=EPOCHS,
             evaluate_functions={'acc': acc},
             evaluate_on_train=True,
