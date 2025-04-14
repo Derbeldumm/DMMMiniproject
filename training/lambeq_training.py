@@ -47,7 +47,7 @@ class lambeq_trainer(base_trainingmodule):
         all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 10
-        EPOCHS = 100
+        EPOCHS = 150
 
         backend_config = {'backend': 'default.qubit'}  # this is the default PennyLane simulator
         model = PennyLaneModel.from_diagrams(all_circuits,
@@ -69,8 +69,8 @@ class lambeq_trainer(base_trainingmodule):
             train_circuits,
             train_labels,
             batch_size=BATCH_SIZE, shuffle=True)
-        val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
-        hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
+        val_dataset = Dataset(val_circuits + hint_circuits, val_labels, shuffle=False)
+        # hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
 
         trainer = PytorchTrainer(
             model=model,
@@ -82,17 +82,17 @@ class lambeq_trainer(base_trainingmodule):
             evaluate_on_train=True,
             use_tensorboard=False,
             verbose='text',
-            log_dir='models/hints',
+            log_dir='models/oldtask',
             seed=0)
 
-        # Hint the model
-        trainer.fit(hint_dataset)
-        model.save("models/hints/final_model")
+        # # Hint the model
+        # trainer.fit(hint_dataset)
+        # model.save("models/hints/final_model")
 
 
         #train on the actual task
-        trainer.epochs = 50
-        trainer.log_dir = "models/oldtask"
+        # trainer.epochs = 50
+        # trainer.log_dir = "models/oldtask"
         trainer.fit(train_dataset, val_dataset)
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))

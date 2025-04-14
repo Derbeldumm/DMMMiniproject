@@ -10,7 +10,7 @@ class entropy_analyser:
         self.task_module = QA_task()
 
     def analyse(self):
-        model = PennyLaneModel.from_checkpoint("models/hints/model.lt")
+        model = PennyLaneModel.from_checkpoint("models/oldtask/best_model.lt")
         gates = self.task_module.get_gates_to_analyse()
         for diagram, name in gates:
           circuit = GrammarDiagramToCircuit(diagram)
