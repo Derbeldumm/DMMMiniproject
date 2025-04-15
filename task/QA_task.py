@@ -153,7 +153,7 @@ class Actor:
 class Story:
     def __init__(self, actors, n_sentences, n_directions=2):
         self.n_sentences = n_sentences
-        self.events = ["turns_to", "turns"]
+        self.events = ["turns_to", "turns", "waves"]
         self.turn_direction_choices = ["around"] if n_directions==2 else ["left", "right", "around"]
         self.story = []
         self.n_directions = n_directions
@@ -183,6 +183,10 @@ class Story:
             turn_direction = random.choice(self.turn_direction_choices)
             act.turns(turn_direction)
             self.story.append(("turns", act.name, turn_direction))
+        
+        elif ev == "waves":
+            act1, act2 = random.sample(self.active_actors, 2)
+            self.story.append(("waves", act1.name, act2.name))
         else:
             raise NotImplementedError()
     
@@ -281,9 +285,9 @@ class QA_task(base_taskmodule):
 
         self.min_actors = 3
         self.max_actors = 5 #10
-        self.min_sents = 10
-        self.max_sents = 10
-        self.n_samples = 10 #more samples for training necc
+        self.min_sents = 5
+        self.max_sents = 5
+        self.n_samples = 25
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:

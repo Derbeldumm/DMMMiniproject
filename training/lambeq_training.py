@@ -28,10 +28,10 @@ class lambeq_trainer(base_trainingmodule):
             with open("datasets/diagrams.pkl", "rb") as f:
                 diagrams, labels = pickle.load(f)
         print(f"{len(diagrams)} Diagrams generated")
-        for i in range(len(diagrams)):
-            print(labels[i])
-            diagrams[i].draw()
-            
+        # for i in range(len(diagrams)):
+        #     print(labels[i])
+        #     diagrams[i].draw()
+
         hint_diagrams, hint_labels = task_module.get_hints()
 
         train_diagrams = diagrams[:int(len(diagrams) * 0.8)]
@@ -49,7 +49,7 @@ class lambeq_trainer(base_trainingmodule):
         all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 10
-        EPOCHS = 150
+        EPOCHS = 50
 
         backend_config = {'backend': 'default.qubit'}  # this is the default PennyLane simulator
         model = PennyLaneModel.from_diagrams(all_circuits,
@@ -57,7 +57,7 @@ class lambeq_trainer(base_trainingmodule):
                                             normalize=True,
                                             backend_config=backend_config)
         model.initialise_weights()
-        model.cuda()
+        #model.cuda()
 
         def acc(y_hat, y):
             return (torch.argmax(y_hat, dim=1) ==
@@ -72,7 +72,7 @@ class lambeq_trainer(base_trainingmodule):
             train_labels + hint_labels,
             batch_size=BATCH_SIZE, shuffle=True)
         val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
-        # hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
+        hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
 
         trainer = PytorchTrainer(
             model=model,
@@ -96,7 +96,7 @@ class lambeq_trainer(base_trainingmodule):
         #train on the actual task
         # trainer.epochs = 50
         # trainer.log_dir = "models/oldtask"
-        trainer.fit(train_dataset, val_dataset)
+        trainer.fit(train_dataset, hint_circuits)
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
         ax_tl.set_title('Training set')
