@@ -28,7 +28,7 @@ class lambeq_trainer(base_trainingmodule):
         else:
             with open("datasets/diagrams.pkl", "rb") as f:
                 diagrams, labels = pickle.load(f)
-        print("Diagrams generated")
+        print(f"{len(diagrams)} Diagrams generated")
 
         hint_diagrams, hint_labels = task_module.get_hints()
 
@@ -66,17 +66,17 @@ class lambeq_trainer(base_trainingmodule):
 
         # Create datasets
         train_dataset = Dataset(
-            train_circuits,
-            train_labels,
+            train_circuits + hint_circuits,
+            train_labels + hint_labels,
             batch_size=BATCH_SIZE, shuffle=True)
-        val_dataset = Dataset(val_circuits + hint_circuits, val_labels, shuffle=False)
+        val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
         # hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
 
         trainer = PytorchTrainer(
             model=model,
             loss_function=loss,
             optimizer=torch.optim.Adam,
-            learning_rate=0.03,
+            learning_rate=0.01,
             epochs=EPOCHS,
             evaluate_functions={'acc': acc},
             evaluate_on_train=True,
@@ -111,7 +111,7 @@ class lambeq_trainer(base_trainingmodule):
         ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
         plt.show()
 
-        model.save()
+        model.save("models/oldtask/best_model.lt")
 
 # class Sim9CzAnsatz(CircuitAnsatz):
 

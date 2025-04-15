@@ -275,7 +275,7 @@ class QA_task(base_taskmodule):
 
         self.min_actors = 3
         self.max_actors = 5 #10
-        self.min_sents = 5
+        self.min_sents = 10
         self.max_sents = 10
         self.n_samples = 10 #more samples for training necc
         self.n_directions = 2

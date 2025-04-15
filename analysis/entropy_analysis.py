@@ -14,7 +14,7 @@ class entropy_analyser:
         gates = self.task_module.get_gates_to_analyse()
         for diagram, name in gates:
           circuit = GrammarDiagramToCircuit(diagram)
-          print(f"Entropy of {name}: {calculate_entangling_power(circuit, model)}")        
+          print(f"Entangling Power of {name}: {calculate_entangling_power(circuit, model)}")        
 
 
 import numpy as np
