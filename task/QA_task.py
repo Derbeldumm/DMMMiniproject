@@ -74,7 +74,11 @@ walks_box = lambda actor, direction: FrobeniusBox(f"walks_{direction}", actor.ob
 
 turns_box = lambda actor, turn_type: FrobeniusBox(f"turn_{turn_type}", actor.obj, actor.obj)(actor)
 
-turns_to_box = lambda follower, followed: FrobeniusBox("turns_to", 
+turns_to_box = lambda turner, towards: FrobeniusBox("turns_to", 
+                turner.obj @ towards.obj, 
+                turner.obj @ towards.obj)(turner, towards)
+
+follows_box = lambda follower, followed: FrobeniusBox("follows", 
                 follower.obj @ followed.obj, 
                 follower.obj @ followed.obj)(follower, followed)
 
@@ -121,6 +125,7 @@ class Actor:
             self.direction = direction
         else:
             self.direction = random.choice(self.direction_choices[n_directions])
+        self.following = None
         self.start_direction = self.direction
 
         self.turn_dict = {
@@ -145,15 +150,24 @@ class Actor:
         }
 
     def turns_to(self, actor):
-        self.direction = actor.direction
+        self.direction = actor.get_direction()
 
     def turns(self, turn_direction):
         self.direction = self.turn_dict[turn_direction][self.direction]
 
+    def follows(self, actor):
+        self.following = actor
+    
+    def get_direction(self):
+        if not self.following:
+            return self.direction
+        else:
+            return self.following.get_direction()
+
 class Story:
     def __init__(self, actors, n_sentences, n_directions=2):
         self.n_sentences = n_sentences
-        self.events = ["turns_to", "turns", "waves"]
+        self.events = ["turns_to", "turns", "waves", "follows"]
         self.turn_direction_choices = ["around"] if n_directions==2 else ["left", "right", "around"]
         self.story = []
         self.n_directions = n_directions
@@ -172,23 +186,34 @@ class Story:
 
         if ev == "turns_to":
             act1, act2 = random.sample(self.active_actors, 2)
-            if self.story[-1] != ("turns_to", act1.name, act2.name):
+            if act1.following != None or self.story[-1] == ("turns_to", act1.name, act2.name):
+                self.event()
+            else:
                 act1.turns_to(act2)
                 self.story.append(("turns_to", act1.name, act2.name))
-            else:
+
+        elif ev == "follows":
+            act1, act2 = random.sample(self.active_actors, 2)
+            if act1.following != None:
                 self.event()
+            else:
+                act1.follows(act2)
+                self.story.append(("follows", act1.name, act2.name))    
 
         elif ev == "turns":
             act = random.choice(self.active_actors)
-            turn_direction = random.choice(self.turn_direction_choices)
-            act.turns(turn_direction)
-            self.story.append(("turns", act.name, turn_direction))
+            if act.following != None:
+                self.event()
+            else:
+                turn_direction = random.choice(self.turn_direction_choices)
+                act.turns(turn_direction)
+                self.story.append(("turns", act.name, turn_direction))
         
         elif ev == "waves":
             act1, act2 = random.sample(self.active_actors, 2)
             self.story.append(("waves", act1.name, act2.name))
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(ev)
     
     def build_diagram(self):
         # Create the types
@@ -210,6 +235,8 @@ class Story:
                     actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = turns_to_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
                 elif event[0] == "waves":
                     actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = waves_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
+                elif event[0] == "follows":
+                    actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = follows_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
                 elif event[0] == "turns":
                     actors[str_to_idx[event[1]]] = turns_box(actors[str_to_idx[event[1]]], event[2])
                 elif event[0] == "walks":
@@ -231,8 +258,7 @@ class Story:
         # print([act.name for act in self.question])
         # print(self.question[0].direction)
         # print(self.question[1].direction)
-        self.answer = self.question[0].direction == self.question[1].direction
-
+        self.answer = self.question[0].get_direction() == self.question[1].get_direction()
         # Build the diagram representation of the story
         diagram = self.build_diagram()
 
@@ -259,9 +285,9 @@ def gen_stories(
                 actors = [Actor(name=name, n_directions=n_directions) for name in used_names]
                 story = Story(actors[:n_act], n_sents, n_directions=n_directions)
                 s, diagram, answer = story.generate()
-                # print(answer)
-                # print(s)
-                # diagram.draw()
+                print(answer)
+                print(s)
+                diagram.draw()
                 
                 # Create label: [1,0] if same direction, [0,1] if different
                 label = [1, 0] if answer else [0, 1]
@@ -284,10 +310,10 @@ class QA_task(base_taskmodule):
         super().__init__()
 
         self.min_actors = 3
-        self.max_actors = 5 #10
-        self.min_sents = 5
-        self.max_sents = 5
-        self.n_samples = 25
+        self.max_actors = 3 #10
+        self.min_sents = 7
+        self.max_sents = 7
+        self.n_samples = 50
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:
@@ -337,7 +363,7 @@ class QA_task(base_taskmodule):
         return diagrams, labels
 
     def get_gates_to_analyse(self):
-        gates = ["turns_to", "waves"]
+        gates = ["turns_to", "waves", "follows"]
         res = []
         for gate in gates:
             dom = FrobeniusTy("Alice") @ FrobeniusTy("Bob")
