@@ -96,7 +96,7 @@ class lambeq_trainer(base_trainingmodule):
         #train on the actual task
         # trainer.epochs = 50
         # trainer.log_dir = "models/oldtask"
-        trainer.fit(train_dataset, hint_circuits)
+        trainer.fit(train_dataset, hint_dataset)
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
         ax_tl.set_title('Training set')
@@ -189,7 +189,7 @@ def GrammarDiagramToCircuit(diagram):
             return box
     F = Functor(ob, ar)
     remove_cups = RemoveCupsRewriter()
-    ansatz = IQPAnsatz({LambeqGrammarTy(type_string): 1 for type_string in ["Ancilla", "Actor", "bool"]},
+    ansatz = Sim4Ansatz({LambeqGrammarTy(type_string): 1 for type_string in ["Ancilla", "Actor", "bool"]},
                 n_layers=3, n_single_qubit_params=3, discard=False)
         
     

@@ -194,7 +194,7 @@ class Story:
 
         elif ev == "follows":
             act1, act2 = random.sample(self.active_actors, 2)
-            if act1.following != None:
+            if act1.following != None and act2.following != None:
                 self.event()
             else:
                 act1.follows(act2)
@@ -284,9 +284,9 @@ def gen_stories(
             while (pos_count < n_samples or neg_count < n_samples):
                 actors = [Actor(name=name, n_directions=n_directions) for name in used_names]
                 story = Story(actors[:n_act], n_sents, n_directions=n_directions)
-                s, diagram, answer = story.generate()
-                print(answer)
-                print(s)
+                # s, diagram, answer = story.generate()
+                # print(answer)
+                # print(s)
                 diagram.draw()
                 
                 # Create label: [1,0] if same direction, [0,1] if different
