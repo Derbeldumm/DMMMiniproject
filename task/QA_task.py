@@ -284,10 +284,10 @@ def gen_stories(
             while (pos_count < n_samples or neg_count < n_samples):
                 actors = [Actor(name=name, n_directions=n_directions) for name in used_names]
                 story = Story(actors[:n_act], n_sents, n_directions=n_directions)
-                # s, diagram, answer = story.generate()
+                s, diagram, answer = story.generate()
                 # print(answer)
                 # print(s)
-                diagram.draw()
+                # diagram.draw()
                 
                 # Create label: [1,0] if same direction, [0,1] if different
                 label = [1, 0] if answer else [0, 1]
