@@ -173,6 +173,7 @@ class Story:
         if ev == "turns_to":
             act1, act2 = random.sample(self.active_actors, 2)
             if self.story[-1] != ("turns_to", act1.name, act2.name):
+                act1.turns_to(act2)
                 self.story.append(("turns_to", act1.name, act2.name))
             else:
                 self.event()
@@ -180,6 +181,7 @@ class Story:
         elif ev == "turns":
             act = random.choice(self.active_actors)
             turn_direction = random.choice(self.turn_direction_choices)
+            act.turns(turn_direction)
             self.story.append(("turns", act.name, turn_direction))
         else:
             raise NotImplementedError()
@@ -222,6 +224,9 @@ class Story:
         while len(self.story) < self.n_sentences:
             self.event()
         self.question = random.sample(self.active_actors, 2)
+        # print([act.name for act in self.question])
+        # print(self.question[0].direction)
+        # print(self.question[1].direction)
         self.answer = self.question[0].direction == self.question[1].direction
 
         # Build the diagram representation of the story
@@ -250,6 +255,7 @@ def gen_stories(
                 actors = [Actor(name=name, n_directions=n_directions) for name in used_names]
                 story = Story(actors[:n_act], n_sents, n_directions=n_directions)
                 s, diagram, answer = story.generate()
+                # print(answer)
                 # print(s)
                 # diagram.draw()
                 

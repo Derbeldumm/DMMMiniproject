@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import Mapping
 import torch
-from jax import jit, grad
 
 class lambeq_trainer(base_trainingmodule):
     """A training module for training based on the lambeq library"""
@@ -29,7 +28,10 @@ class lambeq_trainer(base_trainingmodule):
             with open("datasets/diagrams.pkl", "rb") as f:
                 diagrams, labels = pickle.load(f)
         print(f"{len(diagrams)} Diagrams generated")
-
+        for i in range(len(diagrams)):
+            print(labels[i])
+            diagrams[i].draw()
+            
         hint_diagrams, hint_labels = task_module.get_hints()
 
         train_diagrams = diagrams[:int(len(diagrams) * 0.8)]
@@ -83,6 +85,7 @@ class lambeq_trainer(base_trainingmodule):
             use_tensorboard=False,
             verbose='text',
             log_dir='models/oldtask',
+            device=0,
             seed=0)
 
         # # Hint the model
