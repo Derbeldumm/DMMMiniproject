@@ -183,7 +183,7 @@ def GrammarDiagramToCircuit(diagram):
     
     ob = lambda ty: ty
     def ar(box):
-        if box.name == "turns_to":
+        if box.name in ["turns_to", "follows", "waves"]:
             return GrammarID(box.dom) @ GrammarBox("", GrammarTy(), GrammarTy("Ancilla")) >> GrammarBox(box.name, box.dom @ GrammarTy("Ancilla"), box.cod @ GrammarTy("Ancilla")) >> GrammarID(box.cod) @ GrammarBox("", GrammarTy("Ancilla"), GrammarTy())
         else:
             return box
