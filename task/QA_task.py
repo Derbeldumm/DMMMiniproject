@@ -194,7 +194,7 @@ class Story:
 
         elif ev == "follows":
             act1, act2 = random.sample(self.active_actors, 2)
-            if act1.following != None and act2.following != None:
+            if act1.following != None or act2.following != None:
                 self.event()
             else:
                 act1.follows(act2)
@@ -309,11 +309,11 @@ class QA_task(base_taskmodule):
     def __init__(self):
         super().__init__()
 
-        self.min_actors = 3
-        self.max_actors = 3 #10
-        self.min_sents = 7
-        self.max_sents = 7
-        self.n_samples = 50
+        self.min_actors = 2
+        self.max_actors = 2 #10
+        self.min_sents = 5
+        self.max_sents = 5
+        self.n_samples = 15
         self.n_directions = 2
 
         if self.max_sents < self.max_actors:

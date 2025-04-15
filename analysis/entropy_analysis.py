@@ -11,6 +11,7 @@ class entropy_analyser:
 
     def analyse(self):
         model = PennyLaneModel.from_checkpoint("models/oldtask/best_model.lt")
+        model.to("cpu")
         gates = self.task_module.get_gates_to_analyse()
         for diagram, name in gates:
           circuit = GrammarDiagramToCircuit(diagram)
