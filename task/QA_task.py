@@ -339,23 +339,38 @@ class QA_task(base_taskmodule):
                     for turn_bool_2 in [True, False]:
                         for turns_to_bool in [True, False]:
                             for wave_bool in [True, False]:
-                                story = Story([Actor("Alice"), Actor("Bob")], 0, 2)
-                                story.active_actors[0].start_direction = dir1
-                                story.active_actors[1].start_direction = dir2
-                                story.question = [story.active_actors[0], story.active_actors[1]]
-                                if wave_bool:
-                                        story.story.append(("waves", "Alice", "Bob"))
-                                if turn_bool_1:
-                                    story.story.append(("turns", "Alice", "around"))
-                                if turn_bool_2:
-                                    story.story.append(("turns", "Bob", "around"))
-                                if turns_to_bool:
-                                    story.story.append(("turns_to", "Alice", "Bob"))
-                                if wave_bool:
-                                        story.story.append(("waves", "Alice", "Bob"))
+                                for follow_bool in [True, False]:
+                                    for final_turn_bool in [True, False]:
+                                        answer = dir1 == dir2
+
+                                        story = Story([Actor("Alice"), Actor("Bob")], 0, 2)
+                                        story.active_actors[0].start_direction = dir1
+                                        story.active_actors[1].start_direction = dir2
+                                        story.question = [story.active_actors[0], story.active_actors[1]]
+                                        if wave_bool:
+                                                story.story.append(("waves", "Alice", "Bob"))
+                                        if turn_bool_1:
+                                            answer = not answer
+                                            story.story.append(("turns", "Alice", "around"))
+                                        if turn_bool_2:
+                                            answer = not answer
+                                            story.story.append(("turns", "Bob", "around"))
+                                        if turns_to_bool:
+                                            answer = True
+                                            story.story.append(("turns_to", "Alice", "Bob"))
+                                        if wave_bool:
+                                                story.story.append(("waves", "Bob", "Alice"))
+                                        if turns_to_bool:
+                                            answer = True
+                                            story.story.append(("follows", "Alice", "Bob"))
+                                        if final_turn_bool:
+                                            answer = not answer or follow_bool
+                                            story.story.append(("turns", "Bob", "around"))
+                                        if wave_bool:
+                                                story.story.append(("waves", "Alice", "Bob"))
                             
                                 diagrams.append(story.build_diagram())
-                                labels.append([1, 0] if ((dir1 == dir2) ^ (turn_bool_1 ^ turn_bool_2)) or turns_to_bool else [0, 1])
+                                labels.append([1, 0] if answer else [0, 1])
         
         
         diagrams[0].draw()

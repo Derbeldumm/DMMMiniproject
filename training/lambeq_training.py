@@ -17,9 +17,9 @@ class lambeq_trainer(base_trainingmodule):
     def __init__(self):
         super().__init__()
 
-    def learn_meanings(self, task_module: base_taskmodule) -> dict:
+    def learn_meanings(self, task_module: base_taskmodule, hint_only=False) -> dict:
         print("Generating diagrams...")
-        #generate diagrams if not already generated and stored in pickle file   
+        # generate diagrams if not already generated and stored in pickle file   
         if not os.path.exists("datasets/diagrams.pkl"):
             diagrams, labels = task_module.get_scenarios()
             with open("datasets/diagrams.pkl", "wb") as f:
@@ -31,6 +31,8 @@ class lambeq_trainer(base_trainingmodule):
         # for i in range(len(diagrams)):
         #     print(labels[i])
         #     diagrams[i].draw()
+        if (hint_only):
+            diagrams, labels = [], []
 
         hint_diagrams, hint_labels = task_module.get_hints()
 
@@ -67,25 +69,26 @@ class lambeq_trainer(base_trainingmodule):
             return torch.nn.functional.mse_loss(y_hat, y)
 
         # Create datasets
-        train_dataset = Dataset(
-            train_circuits + hint_circuits,
-            train_labels + hint_labels,
-            batch_size=BATCH_SIZE, shuffle=True)
-        val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
-        hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=False)
+        if not hint_only:
+            train_dataset = Dataset(
+                train_circuits + hint_circuits,
+                train_labels + hint_labels,
+                batch_size=BATCH_SIZE, shuffle=True)
+            val_dataset = Dataset(val_circuits, val_labels, shuffle=False)
+        hint_dataset = Dataset(hint_circuits, hint_labels, shuffle=True, batch_size=BATCH_SIZE)
 
         trainer = PytorchTrainer(
             model=model,
             loss_function=loss,
             optimizer=torch.optim.Adam,
-            learning_rate=0.01,
+            learning_rate=0.03,
             epochs=EPOCHS,
             evaluate_functions={'acc': acc},
             evaluate_on_train=True,
             use_tensorboard=False,
             verbose='text',
-            log_dir='models/oldtask',
-            device=0,
+            log_dir='models/hints',
+            device=0 if torch.cuda.is_available() else -1,
             seed=0)
 
         # # Hint the model
@@ -96,7 +99,11 @@ class lambeq_trainer(base_trainingmodule):
         #train on the actual task
         # trainer.epochs = 50
         # trainer.log_dir = "models/oldtask"
-        trainer.fit(train_dataset, hint_dataset)
+        if hint_only:
+            trainer.fit(hint_dataset, hint_dataset)
+        else:
+            trainer.fit(train_dataset, val_dataset)
+            
 
         fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
         ax_tl.set_title('Training set')
@@ -114,7 +121,7 @@ class lambeq_trainer(base_trainingmodule):
         ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
         plt.show()
 
-        model.save("models/oldtask/best_model.lt")
+        model.save("models/hin/best_model.lt" if hint_only else "models/oldtask/best_model.lt")
 
 # class Sim9CzAnsatz(CircuitAnsatz):
 
@@ -190,7 +197,7 @@ def GrammarDiagramToCircuit(diagram):
     F = Functor(ob, ar)
     remove_cups = RemoveCupsRewriter()
     ansatz = Sim4Ansatz({LambeqGrammarTy(type_string): 1 for type_string in ["Ancilla", "Actor", "bool"]},
-                n_layers=3, n_single_qubit_params=3, discard=False)
+                n_layers=2, n_single_qubit_params=3, discard=False)
         
     
     diagram = F(diagram)
