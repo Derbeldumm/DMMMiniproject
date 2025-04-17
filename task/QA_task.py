@@ -373,7 +373,7 @@ class QA_task(base_taskmodule):
                                 labels.append([1, 0] if answer else [0, 1])
         
         
-        diagrams[0].draw()
+        #diagrams[0].draw()
 
         return diagrams, labels
 

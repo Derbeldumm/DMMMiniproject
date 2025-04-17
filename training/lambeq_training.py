@@ -36,6 +36,9 @@ class lambeq_trainer(base_trainingmodule):
 
         hint_diagrams, hint_labels = task_module.get_hints()
 
+        hint_diagrams = hint_diagrams[:2]
+        hint_labels = hint_labels[:2]
+
         train_diagrams = diagrams[:int(len(diagrams) * 0.8)]
         val_diagrams = diagrams[int(len(diagrams) * 0.8):]
 
@@ -50,10 +53,10 @@ class lambeq_trainer(base_trainingmodule):
 
         all_circuits = train_circuits + val_circuits + hint_circuits
         
-        BATCH_SIZE = 10
+        BATCH_SIZE = 32
         EPOCHS = 50
 
-        backend_config = {'backend': 'default.qubit'}  # this is the default PennyLane simulator
+        backend_config = {'backend': 'default.qubit'}
         model = PennyLaneModel.from_diagrams(all_circuits,
                                             probabilities=True,
                                             normalize=True,
@@ -61,11 +64,18 @@ class lambeq_trainer(base_trainingmodule):
         model.initialise_weights()
         #model.cuda()
 
+        # def two_qubit_result_interpreter(y_hat):
+        #     return torch.sum(y_hat, dim=0)
+
         def acc(y_hat, y):
+            # y_hat = two_qubit_result_interpreter(y_hat)
             return (torch.argmax(y_hat, dim=1) ==
                     torch.argmax(y, dim=1)).sum().item()/len(y)
 
         def loss(y_hat, y):
+            # y_hat = two_qubit_result_interpreter(y_hat)
+            # print(y_hat)
+            # print(y)
             return torch.nn.functional.mse_loss(y_hat, y)
 
         # Create datasets
@@ -100,7 +110,8 @@ class lambeq_trainer(base_trainingmodule):
         # trainer.epochs = 50
         # trainer.log_dir = "models/oldtask"
         if hint_only:
-            trainer.fit(hint_dataset, hint_dataset)
+            print(f"learning {len(hint_diagrams)} hints")
+            trainer.fit(hint_dataset)
         else:
             trainer.fit(train_dataset, val_dataset)
             
@@ -196,8 +207,8 @@ def GrammarDiagramToCircuit(diagram):
             return box
     F = Functor(ob, ar)
     remove_cups = RemoveCupsRewriter()
-    ansatz = Sim4Ansatz({LambeqGrammarTy(type_string): 1 for type_string in ["Ancilla", "Actor", "bool"]},
-                n_layers=2, n_single_qubit_params=3, discard=False)
+    ansatz = Sim4Ansatz({LambeqGrammarTy("Actor"): 2, LambeqGrammarTy("Ancilla"): 1, LambeqGrammarTy("bool"): 1},
+                n_layers=3, n_single_qubit_params=3, discard=False)
         
     
     diagram = F(diagram)

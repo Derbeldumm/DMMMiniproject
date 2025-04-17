@@ -6,6 +6,6 @@ from training.lambeq_training import lambeq_trainer
 if __name__ == "__main__":
     task_module = QA_task()
     training_module = lambeq_trainer()
-    meanings = training_module.learn_meanings(task_module)
+    meanings = training_module.learn_meanings(task_module, hint_only=True)
     analyser = entropy_analyser()
     analyser.analyse()
