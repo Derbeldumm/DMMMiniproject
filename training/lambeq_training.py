@@ -54,7 +54,7 @@ class lambeq_trainer(base_trainingmodule):
         all_circuits = train_circuits + val_circuits + hint_circuits
         
         BATCH_SIZE = 32
-        EPOCHS = 50
+        EPOCHS = 2
 
         backend_config = {'backend': 'default.qubit'}
         model = PennyLaneModel.from_diagrams(all_circuits,
@@ -70,7 +70,7 @@ class lambeq_trainer(base_trainingmodule):
         def acc(y_hat, y):
             # y_hat = two_qubit_result_interpreter(y_hat)
             return (torch.argmax(y_hat, dim=1) ==
-                    torch.argmax(y, dim=1)).sum().item()/len(y)
+                    torch.argmax(y, dim=1)).    sum().item()/len(y)
 
         def loss(y_hat, y):
             # y_hat = two_qubit_result_interpreter(y_hat)
@@ -116,23 +116,23 @@ class lambeq_trainer(base_trainingmodule):
             trainer.fit(train_dataset, val_dataset)
             
 
-        fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
-        ax_tl.set_title('Training set')
-        ax_tr.set_title('Development set')
-        ax_bl.set_xlabel('Iterations')
-        ax_br.set_xlabel('Iterations')
-        ax_bl.set_ylabel('Accuracy')
-        ax_tl.set_ylabel('Loss')
+        # fig, ((ax_tl, ax_tr), (ax_bl, ax_br)) = plt.subplots(2, 2, sharex=True, sharey='row', figsize=(10, 6))
+        # ax_tl.set_title('Training set')
+        # ax_tr.set_title('Development set')
+        # ax_bl.set_xlabel('Iterations')
+        # ax_br.set_xlabel('Iterations')
+        # ax_bl.set_ylabel('Accuracy')
+        # ax_tl.set_ylabel('Loss')
 
-        colours = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-        range_ = np.arange(1, trainer.epochs + 1)
-        ax_tl.plot(range_, trainer.train_epoch_costs, color=next(colours))
-        ax_bl.plot(range_, trainer.train_eval_results['acc'], color=next(colours))
-        ax_tr.plot(range_, trainer.val_costs, color=next(colours))
-        ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
-        plt.show()
+        # colours = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+        # range_ = np.arange(1, trainer.epochs + 1)
+        # ax_tl.plot(range_, trainer.train_epoch_costs, color=next(colours))
+        # ax_bl.plot(range_, trainer.train_eval_results['acc'], color=next(colours))
+        # ax_tr.plot(range_, trainer.val_costs, color=next(colours))
+        # ax_br.plot(range_, trainer.val_eval_results['acc'], color=next(colours))
+        # plt.show()
 
-        model.save("models/hin/best_model.lt" if hint_only else "models/oldtask/best_model.lt")
+        model.save("models/hints/final_model.lt" if hint_only else "models/oldtask/final_model.lt")
 
 # class Sim9CzAnsatz(CircuitAnsatz):
 

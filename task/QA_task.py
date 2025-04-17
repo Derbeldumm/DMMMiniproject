@@ -228,8 +228,6 @@ class Story:
             actors = list(args)
             str_to_idx = {actor.name: i for i, actor in enumerate(self.active_actors)}
 
-            for i in range(len(actors)):
-                actors[i] = walks_box(actors[i], self.active_actors[i].start_direction)
             for event in self.story:
                 if event[0] == "turns_to":
                     actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]] = turns_to_box(actors[str_to_idx[event[1]]], actors[str_to_idx[event[2]]])
@@ -243,6 +241,8 @@ class Story:
                     pass
                 else:
                     raise NotImplementedError(f"Event {event} not supported")
+                for i in range(len(actors)):
+                    actors[i] = walks_box(actors[i], self.active_actors[i].start_direction)
             answer = question_box(actors[str_to_idx[self.question[0].name]], actors[str_to_idx[self.question[1].name]])
             
             return answer
@@ -333,9 +333,9 @@ class QA_task(base_taskmodule):
         diagrams = []
         labels = []
 
-        for dir1 in ["north", "south"]:
+        for dir1 in ["north"]:
             for dir2 in ["north", "south"]:
-                for turn_bool_1 in [True, False]:
+                for turn_bool_1 in [False]:
                     for turn_bool_2 in [True, False]:
                         for turns_to_bool in [True, False]:
                             for wave_bool in [True, False]:
@@ -369,8 +369,8 @@ class QA_task(base_taskmodule):
                                         if wave_bool:
                                                 story.story.append(("waves", "Alice", "Bob"))
                             
-                                diagrams.append(story.build_diagram())
-                                labels.append([1, 0] if answer else [0, 1])
+                                        diagrams.append(story.build_diagram())
+                                        labels.append([1, 0] if answer else [0, 1])
         
         
         #diagrams[0].draw()
@@ -396,5 +396,27 @@ class QA_task(base_taskmodule):
             # Apply the functor to convert the diagram to a proper grammar diagram
             grammar_diagram = FrobeniusToGrammarFunctor(diagram)
             res.append((grammar_diagram, gate))
+
+        return res
+    
+    def get_initialisers(self):
+        gates = ["turns_north", "turns_south"]
+        res = []
+        for gate in gates:
+            dom = FrobeniusTy("Alice")
+            codom = dom
+
+            #Generate Frobenius Diagram for the gate
+            @FrobeniusDiagram.from_callable(dom, codom)
+            def diagram(alice):
+                if gate == "turns_north":
+                  alice = turns_box(alice, "north")
+                if gate == "turns_south":
+                  alice = turns_box(alice, "south")
+                return alice
+            
+            # Apply the functor to convert the diagram to a proper grammar diagram
+            grammar_diagram = FrobeniusToGrammarFunctor(diagram)
+            res.append(grammar_diagram)
 
         return res
